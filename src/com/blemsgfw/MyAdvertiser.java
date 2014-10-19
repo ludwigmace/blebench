@@ -423,10 +423,8 @@ public class MyAdvertiser {
         	// find my custom characteristic class and call the correct handler
         	MyBluetoothGattCharacteristic myBGC = (MyBluetoothGattCharacteristic) myBGCs.get(descriptor.getCharacteristic().getUuid());
         	
-        	if (status == "notify") {
+        	if (status == "notify" || status == "indicate") {
         		myBGC.charHandler.handleNotifyRequest(myBGC.getUuid());
-        	} else if (status == "indicate") {
-        		myBGC.charHandler.handleIndicateRequest(myBGC.getUuid());
         	}
         	
         }

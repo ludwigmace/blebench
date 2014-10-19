@@ -59,6 +59,18 @@ public class BleMessenger {
 		
 	}
 	
+    private void sendIndicateNotify(UUID uuid) {
+    	byte[] nextPacket = blmsgOut.GetPacket().MessageBytes;
+    	
+    	boolean msgSent = myGattServer.updateCharValue(uuid, nextPacket);
+		
+    	if (blmsgOut.PendingPacketStatus()) {
+    		sendIndicateNotify(uuid);
+    	}
+    	
+    }
+
+	
     MyGattServerHandler defaultHandler = new MyGattServerHandler() {
     	
     	public void handleReadRequest(UUID uuid) { }
@@ -89,7 +101,21 @@ public class BleMessenger {
     		}
     	}
     	
-    	public void handleNotifyRequest(UUID uuid) { }
+    	public void handleNotifyRequest(UUID uuid) { 
+    		
+        	byte[] nextPacket = blmsgOut.GetPacket().MessageBytes;
+        	boolean msgSent = myGattServer.updateCharValue(uuid, nextPacket);
+        	
+        	if (msgSent) {        	
+        		Log.v(TAG, "client notified with initial message");
+        	} else {
+        		Log.v(TAG, "client NOT notified with initial message");
+        	}
+    		
+        	// call your self-calling function to keep sending
+        	sendIndicateNotify(uuid);
+    		
+    	}
 
     	public void handleIndicateRequest(UUID uuid) { }
     	
