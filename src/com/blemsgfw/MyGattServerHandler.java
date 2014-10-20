@@ -9,9 +9,7 @@ public interface MyGattServerHandler {
 	public void incomingBytes(UUID charUUID, byte[] inData);
 	
 	public void handleReadRequest(UUID uuid);
-	
-	public void handleIndicateRequest(UUID uuid);
-	
+		
 	public void handleNotifyRequest(UUID uuid);
 	
 }
