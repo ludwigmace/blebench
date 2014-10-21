@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
         }
 		
 		// generate message of particular byte size
-		byte[] bytesMessage = benchGenerateMessage(992);
+		byte[] bytesMessage = benchGenerateMessage(45);
 
 		// declare a new message
 		BleMessage blm = new BleMessage();

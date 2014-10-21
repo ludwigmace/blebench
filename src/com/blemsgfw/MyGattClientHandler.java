@@ -1,6 +1,7 @@
 package com.blemsgfw;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import android.bluetooth.BluetoothDevice;
@@ -13,6 +14,7 @@ public interface MyGattClientHandler {
 	public void getFoundDevices(ArrayList<BluetoothDevice> devices);
 	
 	public void getFoundCharacteristic(String serviceUUID, BluetoothGattCharacteristic foundChar);
+	public void getFoundCharacteristics(List<BluetoothGattCharacteristic> foundChars);
 	
 	public void getReadCharacteristic(String charUUID, byte[] charValue);
 	

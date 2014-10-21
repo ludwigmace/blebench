@@ -1,6 +1,7 @@
 package com.blemsgfw;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import android.bluetooth.BluetoothAdapter;
@@ -37,7 +38,7 @@ public class BleMessenger {
 	
 		// TODO add a way to switch b/w Peripheral and Central modes; for right now we'll start with Peripheral
 		myGattServer = new MyAdvertiser(uuidServiceBase, ctx, btAdptr, btMgr, defaultHandler);
-		myGattClient = new MyCentral(btAdptr, ctx, clientHandler);
+		//myGattClient = new MyCentral(btAdptr, ctx, clientHandler);
 		
 		// add characteristics, to send/receive data as well as control
 		UUID indicateData = myGattServer.addChar(MyAdvertiser.GATT_INDICATE, dataHandler);
@@ -51,12 +52,12 @@ public class BleMessenger {
 		bleStatusCallback = blestatuscallback;
 		
 		// start advertising these
-		//myGattServer.advertiseNow();
+		myGattServer.advertiseNow();
 		
 		UUID[] serviceUuids = new UUID[1];
 		serviceUuids[0] = UUID.fromString(uuidServiceBase);
 		
-		myGattClient.scanLeDevice(true, serviceUuids);
+		//myGattClient.scanLeDevice(true, serviceUuids);
 		
 		// TODO: convert this to use a list of messages, not just a single message
 		blmsgOut = message;
@@ -76,6 +77,21 @@ public class BleMessenger {
     		sendIndicateNotify(uuid);
     	}
     	
+    }
+    
+    private void sendWrite(BluetoothGattCharacteristic writeChar) {
+    	byte[] nextPacket = blmsgOut.GetPacket().MessageBytes;
+    	
+    	Log.v(TAG, "send packet to " + writeChar.getUuid().toString());
+    	//myGattClient.submitCharacteristicWriteRequest(uuid, nextPacket);
+    	myGattClient.submitCharacteristicWriteRequest(writeChar, nextPacket);
+    	
+    	if (blmsgOut.PendingPacketStatus()) {
+    		Log.v(TAG, "more to send!");
+    		sendWrite(writeChar);
+    	} else {
+    		Log.v(TAG, "no more to send!");
+    	}
     }
 
 	
@@ -151,6 +167,33 @@ public class BleMessenger {
 			
 		}
 
+		@Override
+		public void getFoundCharacteristics(List<BluetoothGattCharacteristic> foundChars) {
+			BluetoothGattCharacteristic w = null;
+			
+			// loop over characteristics
+			for (BluetoothGattCharacteristic c : foundChars) {
+				int perms = c.getPermissions();
+				int props = c.getProperties();
+				
+				// take a single writeable characteristic (in this case, the last one)
+	    		if ((props & (BluetoothGattCharacteristic.PROPERTY_WRITE | BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) != 0 ) {
+	    			// this is a write characteristic
+	    			w = c;
+	    		}
+	    		
+			}
+			
+			if (w != null) {
+				// and initiate a write
+				Log.v(TAG, "initiate send to Write characteristic");
+				sendWrite(w);
+			} else {
+				Log.v(TAG, "no write characteristic to send to");
+			}
+			
+		}
+		
 		@Override
 		public void getFoundCharacteristic(String serviceUUID,
 				BluetoothGattCharacteristic foundChar) {
