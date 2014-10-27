@@ -2,11 +2,14 @@ package com.example.blebench;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.GeneralSecurityException;
+import java.security.PrivateKey;
 import java.util.Arrays;
 import java.util.UUID;
 
 import com.blemsgfw.BleMessage;
 import com.blemsgfw.BleMessenger;
+import com.blemsgfw.BleMessengerOptions;
 import com.blemsgfw.BleRecipient;
 import com.blemsgfw.BleStatusCallback;
 import com.google.common.io.ByteStreams;
@@ -15,15 +18,25 @@ import com.google.common.primitives.Bytes;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.ContactsContract;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.EditText;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
+	
+	private static final String TAG = "blebench";
 
+	BleMessenger bleMessenger;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -39,13 +52,43 @@ public class MainActivity extends Activity {
         	Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
         	startActivityForResult(enableBtIntent, RESULT_OK);
         }
+
+        // get an identifier for this installation
+        String myIdentifier = Installation.id(this);
+        
+        // get your name (that name part isn't working)
+        String userName = getUserName(this.getContentResolver());
+        EditText yourNameControl = (EditText) findViewById(R.id.your_name);
+        yourNameControl.setText(userName);
+
+        BleMessengerOptions bo = new BleMessengerOptions();
+       
+        bo.FriendlyName = userName;
+        bo.Identifier = myIdentifier;
+        
+        KeyStuff rsaKey = null;
+        
+		try {
+			rsaKey = new KeyStuff(this, myIdentifier);
+		} catch (GeneralSecurityException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 		
+		bo.PublicKey = rsaKey.PublicKey();
+		Log.v(TAG, "pubkey size in bytes:" + String.valueOf(bo.PublicKey.length));
+       
+        
+		// create a messenger along with the context (for bluetooth operations)
+		bleMessenger = new BleMessenger(bo, btMgr, btAdptr, this);
+        
 		// generate message of particular byte size
 		byte[] bytesMessage = benchGenerateMessage(45);
 
+		/*
 		// declare a new message
 		BleMessage blm = new BleMessage();
-		
 		
 		// add a recipient
 		BleRecipient br1 = new BleRecipient("macon_schoonmaker");
@@ -53,12 +96,12 @@ public class MainActivity extends Activity {
 		
 		// set the message
 		blm.setMessage(bytesMessage);
-		
-		// create a messenger and add the message to send, along with the context (for bluetooth operations)
-		BleMessenger blmgr = new BleMessenger(btMgr, btAdptr, this);
-		
+
+		 */		
 		// this should queue the message up to send
-		blmgr.sendMessage(blm, bleMessageStatus);
+		//blmgr.sendMessage(blm, bleMessageStatus);
+		
+		//blmgr.attendMessage(blmIn, bleMessageStatus);
 		
 		/*
 		BleMessager blm = new BleMessager();
@@ -97,6 +140,10 @@ public class MainActivity extends Activity {
 		
 		
 	};
+	
+	public void handleButtonFindAFriend(View view) {
+		bleMessenger.showFound();
+	}
 	
 	private void showMessage(String msg) {
 		Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
@@ -159,4 +206,29 @@ public class MainActivity extends Activity {
 		
 		return Arrays.copyOf(bytesMessage, MessageSize);
 	}
+	
+	private String getUserName(ContentResolver cr) {
+        
+        String displayName = "";
+         
+        Cursor c = cr.query(ContactsContract.Profile.CONTENT_URI, null, null, null, null); 
+         
+        try {
+            if (c.moveToFirst()) {
+                displayName = c.getString(c.getColumnIndex("display_name"));
+            }  else {
+            	displayName = "nexus5";
+            	Log.v(TAG, "can't get user name; no error");	
+            }
+            
+        } catch (Exception x) {
+        	Log.v(TAG, "can't get user name; error");
+        	
+		} finally {
+            c.close();
+        }
+        
+        return displayName;
+	}
+	
 }

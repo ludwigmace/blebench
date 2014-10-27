@@ -5,7 +5,9 @@ import java.util.List;
 import java.util.UUID;
 
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattServer;
 
 public interface MyGattClientHandler {
 	
@@ -15,12 +17,17 @@ public interface MyGattClientHandler {
 	
 	public void getFoundCharacteristic(String serviceUUID, BluetoothGattCharacteristic foundChar);
 	public void getFoundCharacteristics(List<BluetoothGattCharacteristic> foundChars);
+	public void getFoundCharacteristics(BluetoothGatt gatt, List<BluetoothGattCharacteristic> foundChars);
 	
-	public void getReadCharacteristic(String charUUID, byte[] charValue);
+	public void getReadCharacteristic(BluetoothGattCharacteristic readChar, byte[] charValue, int status);
+	
+	public void getReadCharacteristic(BluetoothGatt gatt, BluetoothGattCharacteristic readChar, byte[] charValue, int status);
+	
+	public void readCharacteristicReturned(BluetoothGatt gatt, BluetoothGattCharacteristic readChar, byte[] charValue, int status);
 	
 	public void getNotifyUpdate(String charUUID, byte[] charValue);
 	
-	public void getWriteResult(String charUUID, int result);
+	public void getWriteResult(BluetoothGattCharacteristic writtenCharacteristic, int result);
 	
 	public void reportDisconnect();
 	

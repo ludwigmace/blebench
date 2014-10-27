@@ -4,5 +4,6 @@
     <string name="app_name">BLEBench</string>
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
+    <string name="find_a_friend">Find A Friend</string>
 
 </resources>

@@ -96,34 +96,24 @@ public class MyCentral {
     	Log.v("BLECC", "trying to read remote RSSI");
     }
     
-    public boolean subscribeToNotify(UUID uuid) {
+    public boolean subscribeToNotify(BluetoothGattCharacteristic indicifyChar) {
     	
     	boolean result = false;
     	
     	//List<BluetoothGattService> foundServices = mBluetoothGatt.getServices();
     	BluetoothGattService s = mBluetoothGatt.getService(UUID.fromString(strSvcUuidBase));
-    	BluetoothGattCharacteristic c = null;
-    	
-    	// check the services
-		Log.v(TAG, "try to pull characteristic via uuid:" + uuid.toString());
-		try {
-			c = s.getCharacteristic(uuid);
-		} catch (Exception e) {
-			c = null;
-			Log.v(TAG, "error while trying to pull characteristic by UUID from service:" + s.getUuid().toString());
-		}
-    	
-    	if (c != null) {
-        	int cProps = c.getProperties();
+   	
+    	if (indicifyChar != null) {
+        	int cProps = indicifyChar.getProperties();
         	
 	   	     if ((cProps & (BluetoothGattCharacteristic.PROPERTY_NOTIFY | BluetoothGattCharacteristic.PROPERTY_INDICATE)) != 0) {
-		    	 Log.v(TAG, "sub for notifications from " + c.getUuid().toString().substring(0,8));
+		    	 Log.v(TAG, "sub for notifications from " + indicifyChar.getUuid().toString().substring(0,8));
 			
 				// enable notifications for this guy
-				mBluetoothGatt.setCharacteristicNotification(c, true);
+				mBluetoothGatt.setCharacteristicNotification(indicifyChar, true);
 				
 				// tell the other guy that we want characteristics enabled
-				BluetoothGattDescriptor descriptor = c.getDescriptor(UUID.fromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
+				BluetoothGattDescriptor descriptor = indicifyChar.getDescriptor(UUID.fromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
 				
 				// if it's a notification value, subscribe by setting the descriptor to ENABLE_NOTIFICATION_VALUE
 				if ((cProps & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
@@ -152,84 +142,34 @@ public class MyCentral {
     	return mScanning;
     }
     
-    public boolean submitCharacteristicWriteRequest(BluetoothGattCharacteristic writeChar, byte[] val) {
+    public boolean submitCharacteristicWriteRequest(final BluetoothGattCharacteristic writeChar, final byte[] val) {
 		
     	boolean charWrote = false;
-    	Log.v(TAG, "characteristic found by char, issuing write request " + writeChar.getUuid().toString());
+    	Log.v(TAG, "calling setValue, setWriteType, then mBluetoothGatt.writeCharacteristic" + writeChar.getUuid().toString());
 		
+    	
+    	writeChar.setValue(val);
+    	writeChar.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+    		
     	try {
-    		writeChar.setValue(val);
-    		writeChar.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
-		
     		mBluetoothGatt.writeCharacteristic(writeChar);
     		charWrote = true;
     	} catch (Exception e) {
     		Log.v(TAG, "cannot write char ");
+    		Log.v(TAG, e.getMessage());
     	}
 		
 		return charWrote;
     }
     
-    public boolean submitCharacteristicWriteRequest(UUID uuid, byte[] val) {
-    	boolean charWrote = false;
-    	
-    	// this was already populated when you connected, so might as well re-use it
-    	// does this stay populated?
-    	// List<BluetoothGattService> foundServices = mBluetoothGatt.getServices();
-    	Log.v(TAG, "write request submitted for " + uuid.toString());
-    	BluetoothGattCharacteristic c = null;
-    	
-    	BluetoothGattService s = mBluetoothGatt.getService(UUID.fromString(strSvcUuidBase));
-
-		try {
-			Log.v(TAG, "try to pull characteristic via uuid:" + uuid.toString());
-			c = s.getCharacteristic(uuid);
-		} catch (Exception e) {
-			c = null;
-			Log.v(TAG, "error while trying to pull characteristic by UUID from service:" + s.getUuid().toString());
-		}
-    	
-    	
-    	if (c != null) {
-    		Log.v(TAG, "characteristic found, issuing write request");
-    	 	c.setValue(val);
-        	c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
-    		
-    		mBluetoothGatt.writeCharacteristic(c);
-    		charWrote = true;
-    	}
-    	
-    	
-    	return charWrote;
-    }
     
-    public boolean submitCharacteristicWriteRequest(UUID uuid, String val) {
-    	return submitCharacteristicWriteRequest(uuid, val.getBytes());
-    	
-    }
-    
-    public boolean submitCharacteristicReadRequest(UUID uuid) {
-    	// locate the characteristic via the string representation of its UUID, then "read" its value
+    public boolean submitCharacteristicReadRequest(BluetoothGattCharacteristic readChar) {
     	
     	boolean charFound = false;
-    	
-    	// this was already populated when you connected, so might as well re-use it
-    	// does this stay populated?
-    	//List<BluetoothGattService> foundServices = mBluetoothGatt.getServices();
-    	BluetoothGattService s = mBluetoothGatt.getService(UUID.fromString(strSvcUuidBase));
-    	BluetoothGattCharacteristic c = null;
-    	
-		try {
-			Log.v(TAG, "try to pull characteristic via uuid:" + uuid.toString());
-			c = s.getCharacteristic(uuid);
-		} catch (Exception e) {
-			c = null;
-			Log.v(TAG, "error while trying to pull characteristic by UUID from service:" + s.getUuid().toString());
-		}
-    	
-    	if (c != null) {
-    		Log.v(TAG, "characteristic found, issuing read request");
-    		mBluetoothGatt.readCharacteristic(c);
+
+    	if (readChar != null) {
+    		Log.v(TAG, "issuing read request:" + readChar.getUuid().toString());
+    		mBluetoothGatt.readCharacteristic(readChar);
     		charFound = true;
     	}
     	
@@ -258,11 +198,22 @@ public class MyCentral {
     
     private void connectDevices() {
     	
-    	BluetoothDevice b = foundDevices.get(0);
-    	b.connectGatt(ctx, false, mGattCallback);
+    	// if we've found devices, loop through and do what we gotta do
+    	if (foundDevices.size() > 0) {
+
+    		for (BluetoothDevice b: foundDevices) {
+	    		mBluetoothGatt = b.connectGatt(ctx, false, mGattCallback);
+	    		Log.v(TAG, "connect to: " + b.getAddress());
+			}
+    		
+    	} else {
+    		Log.v(TAG, "no devices found to connect!");
+    	}
     }
     
-    public void scanLeDevice(final boolean enable, UUID[] serviceUuids) {
+
+    
+    public void scanLeDevice(final boolean enable) {
         if (enable) {
 
         	// call STOP after SCAN_PERIOD ms, which will spawn a thread to stop the scan
@@ -298,9 +249,8 @@ public class MyCentral {
     	@Override
     	// Characteristic notification
     	public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-    	    //broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+
     		gattClientHandler.getNotifyUpdate(characteristic.getUuid().toString(), characteristic.getValue());
-    		
     		
     		Log.v(TAG, "characteristic changed val is " + new String(characteristic.getValue()));
     	}
@@ -316,7 +266,7 @@ public class MyCentral {
                 intentAction = ACTION_GATT_CONNECTED;
                 mConnectionState = STATE_CONNECTED;
                 
-                Log.v(TAG, "Connected to GATT server.");
+                Log.v(TAG, "Connected to GATT server " + gatt.getDevice().getAddress());
                 gatt.discoverServices();
                 //Log.i(TAG, "Attempting to start service discovery:" + mBluetoothGatt.discoverServices());
 
@@ -324,15 +274,22 @@ public class MyCentral {
                 intentAction = ACTION_GATT_DISCONNECTED;
                 mConnectionState = STATE_DISCONNECTED;
                 gattClientHandler.reportDisconnect();
-                Log.i(TAG, "Disconnected from GATT server.");
+                Log.i(TAG, "Disconnected from GATT server " + gatt.getDevice().getAddress());
                 
             }
         }
         
         @Override
         public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-        	gattClientHandler.getWriteResult(characteristic.getUuid().toString(), status);
-          Log.v(TAG, "write submitted val:" + new String(characteristic.getValue()) + " - result:" + String.valueOf(status));
+        	//gattClientHandler.getWriteResult(characteristic.getUuid().toString(), status);
+        	if (status == BluetoothGatt.GATT_SUCCESS) {
+        		Log.v(TAG, "successful write");
+        		gattClientHandler.getWriteResult(characteristic, status);
+        	}
+        	
+    		
+        	
+           //Log.v(TAG, "write submitted val:" + new String(characteristic.getValue()) + " - result:" + String.valueOf(status));
           
         }
 
@@ -341,13 +298,15 @@ public class MyCentral {
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 //broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED);
-            	Log.v("SERVICES", "services discovered");
+            	Log.v("SERVICES", "services discovered on " + gatt.getDevice().getAddress());
             	
             	// now that services have been discovered, let's pull them down
+            	// we shouldn't actually need to do this
+            	/*
             	List<BluetoothGattService> foundServices = gatt.getServices();
             	
             	Log.v(TAG, "found " + String.valueOf(foundServices.size()) + " service(s)");
-            	
+            	*/
             	/*
             	for (BluetoothGattService s : foundServices) {
             		Log.v("SERVICES", "services found:" + s.getUuid().toString());
@@ -356,12 +315,18 @@ public class MyCentral {
             	// we're pulling a specific service
             	BluetoothGattService s = gatt.getService(UUID.fromString(strSvcUuidBase));
 
+            	// if we've found a service
             	if (s != null) {
+            		
+            		// we need to determine which phase we're in, or what function we want, to decide what to do here...
+            		// should we decide what to do here or pass that decision on somewhere else?
+            		
             		if (s.getCharacteristics() != null) {
-            			gattClientHandler.getFoundCharacteristics(s.getCharacteristics());
+            			gattClientHandler.getFoundCharacteristics(gatt, s.getCharacteristics());
             		} else {
-            			Log.v(TAG, "can't find characteristics");	
+            			Log.v(TAG, "can't find characteristics");
             		}
+           
             	} else {
             		Log.v(TAG, "can't find service " + strSvcUuidBase);
             	}
@@ -376,7 +341,9 @@ public class MyCentral {
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
             	
-            	gattClientHandler.getReadCharacteristic(characteristic.getUuid().toString(), characteristic.getValue());
+            	
+            	gattClientHandler.readCharacteristicReturned(gatt, characteristic, characteristic.getValue(), status);
+            	//gattClientHandler.getReadCharacteristic(gatt, characteristic, characteristic.getValue(), status);
             	
                 Log.v(TAG, "+read " + characteristic.getUuid().toString() + ": " + new String((characteristic.getValue())));
             } else {

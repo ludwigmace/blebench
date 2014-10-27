@@ -290,19 +290,13 @@ public class MyAdvertiser {
 		return lUUID;
 	}
 	
-	public UUID addChar(String charType, MyGattServerHandler charHandler) {
-
-		//increment the counter for the next characteristic
-		iCount++;
-		
-		String strUUID =  theBaseUUID.substring(0, 4) + new String(new char[3]).replace("\0", "0") + String.valueOf(iCount) + theBaseUUID.substring(8, theBaseUUID.length());
-		UUID uuid = UUID.fromString(strUUID);
+	public UUID addChar(String charType, UUID uuid, MyGattServerHandler charHandler) {
 		
 		//TODO: convert to simpler intProperties/intPermissions and add subscribe descriptors for appropriate characteristics
 		if (charType.equals(GATT_NOTIFY)) {
 		
-	        myBGCs.put(UUID.fromString(strUUID), new MyBluetoothGattCharacteristic(
-	                UUID.fromString(strUUID),
+	        myBGCs.put(uuid, new MyBluetoothGattCharacteristic(
+	        		uuid,
 	                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
 	                BluetoothGattCharacteristic.PERMISSION_READ,
 	                charHandler
@@ -368,7 +362,19 @@ public class MyAdvertiser {
 	        bgc = null;
 		}
 		
-		return UUID.fromString(strUUID);
+		return uuid;
+	}
+	
+	
+	public UUID addChar(String charType, MyGattServerHandler charHandler) {
+
+		//increment the counter for the next characteristic
+		iCount++;
+		
+		String strUUID =  theBaseUUID.substring(0, 4) + new String(new char[3]).replace("\0", "0") + String.valueOf(iCount) + theBaseUUID.substring(8, theBaseUUID.length());
+		UUID uuid = UUID.fromString(strUUID);
+		
+		return addChar(charType, uuid, charHandler);
 		
 	}
 	

@@ -142,53 +142,56 @@ public class BleMessage {
     	ByteBuffer bb  = ByteBuffer.wrap(incomingBytes);
     	boolean nextMsg = false;
     	
-    	// get the first byte as an integer, unsigned
-    	//int packetCounter = bb.get(0) & 0xFF;
-    	byte pC = bb.get(0);
-    	 
-    	
-    	// if the first byte is a 0X01, then the 2nd byte is the size of the message and the rest is the digest
-    	if (pC == (byte) 0x01) {
-        	BlePacketCount = bb.get(1) & 0xFF;
-        	
-        	BleMsgDigest = new byte[incomingBytes.length];
-      	
-        	// build the message digest
-        	bb.get(BleMsgDigest, 2, incomingBytes.length - 2);
-        	              
-        	// we've got a new message, so re-init the messagePackets arraylist
-        	messagePackets = new ArrayList<BlePacket>();
-        	
-        	Log.v(TAG, "new msg");
-        	
-        	nextMsg = true;
-        	
-        // EOT
-    	} else if (pC == (byte) 0x04) {
-    		nextMsg = false;
-            
-    	//number, so a packet counter
-    	} else {
-    		int packetCounter = bb.get(1) & 0xFF;
-    		
-    		// our message will be the size of the incoming packet less the 2 for the control and counter
-    		byte[] bytesMsg = new byte[incomingBytes.length - 2];
-
-    		// set bytebuffer position to 3rd character (offset 2)
-    		bb.position(2);
-    		
-    		// read the rest of it into the bytesMsg array
-    		bb.get(bytesMsg, 0, incomingBytes.length - 2);
-    		
-    		// add to our list of messages
-    		addPacket(packetCounter, bytesMsg);
-    		
-    		Log.v(TAG, "msg:"+new String(bytesMsg));
-    		
-    		nextMsg = true;
-        	
+    	if (incomingBytes.length > 1) {
+	    	
+	    	// get the first byte as an integer, unsigned
+	    	//int packetCounter = bb.get(0) & 0xFF;
+	    	byte pC = bb.get(0);
+	    	 
+	    	
+	    	// if the first byte is a 0X01, then the 2nd byte is the size of the message and the rest is the digest
+	    	if (pC == (byte) 0x01) {
+	        	BlePacketCount = bb.get(1) & 0xFF;
+	        	
+	        	BleMsgDigest = new byte[incomingBytes.length];
+	      	
+	        	// build the message digest
+	        	bb.get(BleMsgDigest, 2, incomingBytes.length - 2);
+	        	              
+	        	// we've got a new message, so re-init the messagePackets arraylist
+	        	messagePackets = new ArrayList<BlePacket>();
+	        	
+	        	Log.v(TAG, "new msg");
+	        	
+	        	nextMsg = true;
+	        	
+	        // EOT
+	    	} else if (pC == (byte) 0x04) {
+	    		nextMsg = false;
+	            
+	    	//number, so a packet counter
+	    	} else {
+	    		int packetCounter = bb.get(1) & 0xFF;
+	    		
+	    		// our message will be the size of the incoming packet less the 2 for the control and counter
+	    		byte[] bytesMsg = new byte[incomingBytes.length - 2];
+	
+	    		// set bytebuffer position to 3rd character (offset 2)
+	    		bb.position(2);
+	    		
+	    		// read the rest of it into the bytesMsg array
+	    		bb.get(bytesMsg, 0, incomingBytes.length - 2);
+	    		
+	    		// add to our list of messages
+	    		addPacket(packetCounter, bytesMsg);
+	    		
+	    		Log.v(TAG, "msg:"+new String(bytesMsg));
+	    		
+	    		nextMsg = true;
+	        	
+	    	}
+    
     	}
-    	
     	return nextMsg;
 	}
 	
