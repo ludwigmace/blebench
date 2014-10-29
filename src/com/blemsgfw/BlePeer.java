@@ -3,18 +3,23 @@ package com.blemsgfw;
 public class BlePeer {
 
 	private String peerAddress;
-	private byte[] encryptKey;
+	private String peerName;
 
 	public BlePeer(String PeerAddress) {
 		peerAddress = PeerAddress;
+		peerName="";
 	}
 	
-	public String RecipientName() {
+	public String RecipientAddress() {
 		return peerAddress;
 	}
 	
-	public byte[] RecipientKey() {
-		return encryptKey;
+	public void SetName(String PeerName) {
+		peerName = PeerName;
+	}
+	
+	public String GetName() {
+		return peerName;
 	}
 	
 }

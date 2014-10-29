@@ -137,16 +137,30 @@ public class MainActivity extends Activity {
                 }
             });
 		}
+
+		@Override
+		public void remoteServerAdded(String serverName) {
+			showMessage(serverName);
+		}
 		
 		
 	};
 	
 	public void handleButtonFindAFriend(View view) {
-		bleMessenger.showFound();
+		bleMessenger.showFound(bleMessageStatus);
 	}
 	
 	private void showMessage(String msg) {
-		Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+
+		final String message = msg;
+		final Context fctx = this;
+		
+		runOnUiThread(new Runnable() {
+			  public void run() {
+				  Toast.makeText(fctx, message, Toast.LENGTH_LONG).show();
+			  }
+			});
+		
 	}
 	
 	

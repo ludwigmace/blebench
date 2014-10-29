@@ -62,6 +62,8 @@ public class MyCentral {
     
     private MyGattClientHandler gattClientHandler;
     
+    private List<BleCharacteristic> serviceDef;
+    
     // scan for 2 1/2 seconds at a time
     private static final long SCAN_PERIOD = 2500;
     
@@ -80,6 +82,8 @@ public class MyCentral {
         
         gattClientHandler = myHandler;
         
+        serviceDef = new ArrayList<BleCharacteristic>();
+        
     }
 
     public void initConnect(BluetoothDevice b) {
@@ -88,12 +92,21 @@ public class MyCentral {
     
     public void connectAddress(String btAddress){
     	BluetoothDevice b = centralBTA.getRemoteDevice(btAddress);
-    	mBluetoothGatt = b.connectGatt(ctx, false, mGattCallback);
+    	
+    	// instead of using this global variable, try something else
+    	//mBluetoothGatt = b.connectGatt(ctx, false, mGattCallback);
+    	b.connectGatt(ctx, false, mGattCallback);
     }
     
     public void getRSSI() {
     	mBluetoothGatt.readRemoteRssi();
     	Log.v("BLECC", "trying to read remote RSSI");
+    }
+    
+    public void setRequiredServiceDef(List<BleCharacteristic> bleChars) {
+    	
+    	serviceDef = bleChars;
+    	
     }
     
     public boolean subscribeToNotify(BluetoothGattCharacteristic indicifyChar) {
@@ -222,8 +235,8 @@ public class MyCentral {
                 public void run() {
                     mScanning = false;
                     centralBTA.stopLeScan(mLeScanCallback);
-                    connectDevices();
-        			//gattClientHandler.getFoundDevices(foundDevices);
+                    //connectDevices();
+        			gattClientHandler.intakeFoundDevices(foundDevices);
         			//Log.v(TAG, "scan stopped, found " + String.valueOf(foundDevices.size()) + " devices");
                 }
             }, SCAN_PERIOD);
@@ -284,10 +297,8 @@ public class MyCentral {
         	//gattClientHandler.getWriteResult(characteristic.getUuid().toString(), status);
         	if (status == BluetoothGatt.GATT_SUCCESS) {
         		Log.v(TAG, "successful write");
-        		gattClientHandler.getWriteResult(characteristic, status);
+        		gattClientHandler.handleWriteResult(gatt, characteristic, status);
         	}
-        	
-    		
         	
            //Log.v(TAG, "write submitted val:" + new String(characteristic.getValue()) + " - result:" + String.valueOf(status));
           
@@ -315,21 +326,42 @@ public class MyCentral {
             	// we're pulling a specific service
             	BluetoothGattService s = gatt.getService(UUID.fromString(strSvcUuidBase));
 
+            	boolean bServiceGood = false;
+            	
             	// if we've found a service
             	if (s != null) {
-            		
             		// we need to determine which phase we're in, or what function we want, to decide what to do here...
             		// should we decide what to do here or pass that decision on somewhere else?
             		
-            		if (s.getCharacteristics() != null) {
-            			gattClientHandler.getFoundCharacteristics(gatt, s.getCharacteristics());
-            		} else {
-            			Log.v(TAG, "can't find characteristics");
-            		}
-           
+            		bServiceGood = true;
+            		
+            		// check to make sure every characteristic we want is advertised in this service
+                	for (BleCharacteristic b: serviceDef) {
+                		if (s.getCharacteristic(b.uuid) == null) {
+                			bServiceGood = false;
+                			Log.v(TAG, "characteristic " + b.uuid.toString() + " not found");
+                			break;
+                		}
+                	}
+            		           
             	} else {
             		Log.v(TAG, "can't find service " + strSvcUuidBase);
             	}
+
+            	// if this service is good, we can proceed to parlay with our remote party
+            	// OR, you can actually go ahead and issue your READ for the id characteristic
+        		if (bServiceGood) {
+        			Log.v(TAG, "service definition found; stay connected");
+        			//gattClientHandler.getFoundCharacteristics(gatt, s.getCharacteristics());
+        			//gattClientHandler.parlayWithRemote(gatt.getDevice().getAddress());
+        			
+        			// initiate identification phase, and then data transfer phase!
+        			
+        		} else {
+        			Log.v(TAG, "service definition not found, disconnect");
+        			gatt.disconnect();
+        		}
+
 		        
             } else {
                 Log.w(TAG, "onServicesDiscovered received: " + status);
@@ -340,7 +372,6 @@ public class MyCentral {
         // Result of a characteristic read operation
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-            	
             	
             	gattClientHandler.readCharacteristicReturned(gatt, characteristic, characteristic.getValue(), status);
             	//gattClientHandler.getReadCharacteristic(gatt, characteristic, characteristic.getValue(), status);

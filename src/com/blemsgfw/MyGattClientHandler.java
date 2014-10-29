@@ -13,7 +13,7 @@ public interface MyGattClientHandler {
 	
 	//public void getFoundDevice(BluetoothDevice device, int rssi, byte[] scanRecord);
 	
-	public void getFoundDevices(ArrayList<BluetoothDevice> devices);
+	public void intakeFoundDevices(ArrayList<BluetoothDevice> devices);
 	
 	public void getFoundCharacteristic(String serviceUUID, BluetoothGattCharacteristic foundChar);
 	public void getFoundCharacteristics(List<BluetoothGattCharacteristic> foundChars);
@@ -28,6 +28,10 @@ public interface MyGattClientHandler {
 	public void getNotifyUpdate(String charUUID, byte[] charValue);
 	
 	public void getWriteResult(BluetoothGattCharacteristic writtenCharacteristic, int result);
+	
+	public void handleWriteResult(BluetoothGatt gatt, BluetoothGattCharacteristic writtenCharacteristic, int result);
+	
+	public void parlayWithRemote(String remoteAddress);
 	
 	public void reportDisconnect();
 	

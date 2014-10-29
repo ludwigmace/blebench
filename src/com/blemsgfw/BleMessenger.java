@@ -3,7 +3,9 @@ package com.blemsgfw;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.example.blebench.KeyStuff;
@@ -41,8 +43,10 @@ public class BleMessenger {
     
     private String myIdentifier;
     private String myFriendlyName;
+
+    private Map<String, BlePeer> peerMap;
     
-    private ArrayList<BlePeer> peerList;
+    List<BleCharacteristic> serviceDef;
 	
 	public BleMessenger(BleMessengerOptions options, BluetoothManager m, BluetoothAdapter a, Context c) {
 		myIdentifier = options.Identifier;
@@ -52,34 +56,55 @@ public class BleMessenger {
 		btAdptr = a;
 		ctx = c;
 		
-		peerList = new ArrayList<BlePeer>();
+		serviceDef = new ArrayList<BleCharacteristic>();
+		
+		// i need a place to put my found peers
+		peerMap = new HashMap<String, BlePeer>();
 		
 		// create your server for listening and your client for looking; Android can be both at the same time
 		myGattServer = new MyAdvertiser(uuidServiceBase, ctx, btAdptr, btMgr, defaultHandler);
 		myGattClient = new MyCentral(btAdptr, ctx, clientHandler);
-		
-		// set up a read characteristic for your id
-		String charIdentifier = "100";
-		String strUUID =  uuidServiceBase.substring(0, 4) + new String(new char[4-charIdentifier.length()]).replace("\0", "0") + charIdentifier + uuidServiceBase.substring(8, uuidServiceBase.length());
-		UUID idUUID = UUID.fromString(strUUID);		
-		idUUID = myGattServer.addChar(MyAdvertiser.GATT_READ, idUUID, controlHandler);
-		myGattServer.updateCharValue(idUUID, myIdentifier + "|" + myFriendlyName);
-		
-		// set up a write characteristic to receive id information
-		charIdentifier = "101";
-		strUUID = uuidServiceBase.substring(0, 4) + new String(new char[4-charIdentifier.length()]).replace("\0", "0") + charIdentifier + uuidServiceBase.substring(8, uuidServiceBase.length());
-		idUUID = UUID.fromString(strUUID);		
-		idUUID = myGattServer.addChar(MyAdvertiser.GATT_READWRITE, idUUID, controlHandler);
-		myGattServer.updateCharValue(idUUID, "i'm listening");
+	
+		serviceDef.add(new BleCharacteristic("identifier_read", uuidFromBase("100"), MyAdvertiser.GATT_READ));		
+		serviceDef.add(new BleCharacteristic("identifier_writes", uuidFromBase("101"), MyAdvertiser.GATT_READWRITE));
+		//serviceDef.add(new BleCharacteristic("data_notify", uuidFromBase("102"), MyAdvertiser.GATT_NOTIFY));
+		//serviceDef.add(new BleCharacteristic("data_indicate", uuidFromBase("103"), MyAdvertiser.GATT_INDICATE));
+		//serviceDef.add(new BleCharacteristic("data_write", uuidFromBase("104"), MyAdvertiser.GATT_WRITE));
 
-		// advertising doesn't take much energy, so go ahead and do it
-		myGattServer.advertiseNow();
+		
+		myGattClient.setRequiredServiceDef(serviceDef);
+
 		
 	}
 	
-	public void showFound() {
+	private UUID uuidFromBase(String smallUUID) {
+		String strUUID =  uuidServiceBase.substring(0, 4) + new String(new char[4-smallUUID.length()]).replace("\0", "0") + smallUUID + uuidServiceBase.substring(8, uuidServiceBase.length());
+		UUID idUUID = UUID.fromString(strUUID);
+		
+		return idUUID;
+	}
+	
+	
+	public void BeFound() {
+		
+		
+		myGattServer.addChar(MyAdvertiser.GATT_READ, uuidFromBase("100"), controlHandler);
+		myGattServer.addChar(MyAdvertiser.GATT_READWRITE, uuidFromBase("101"), controlHandler);
+		
+		myGattServer.updateCharValue(uuidFromBase("100"), myIdentifier + "|" + myFriendlyName);
+		myGattServer.updateCharValue(uuidFromBase("101"), "i'm listening");
+		
+		// advertising doesn't take much energy, so go ahead and do it
+		//myGattServer.advertiseNow();
+		
+	}
+	
+	
+	public void showFound(BleStatusCallback blestatuscallback) {
 		// actually return a list of some sort
 		myGattClient.scanLeDevice(true);
+		
+		bleStatusCallback = blestatuscallback;
 	}
 	
 	public void attendMessage(BleMessage message, BleStatusCallback blestatuscallback) {
@@ -136,6 +161,7 @@ public class BleMessenger {
     	
     }
     
+    // make this work for a collection of recipients, and for each recipient, each one of their pending messages
     private void sendWrite(BluetoothGattCharacteristic writeChar) {
     	
     	// if we've got packets pending send, then send them
@@ -147,7 +173,6 @@ public class BleMessenger {
     	} else {
     		Log.v(TAG, "all pending packets sent");
     	}
-
     }
 
     
@@ -157,7 +182,7 @@ public class BleMessenger {
 
     }
 
-    public void parseIncomingMsg(BluetoothGattCharacteristic incomingChar, byte[] incomingBytes, boolean initNewRead) {
+    public void parseIncomingMsg(BlePeer blePeer, BluetoothGattCharacteristic incomingChar, byte[] incomingBytes, boolean initNewRead) {
     	
     	// read in the bytes to build the message - if it needs another read, read in
     	// probably need to build in a failsafe as well
@@ -187,7 +212,8 @@ public class BleMessenger {
     	}
     	
     }
-	
+    
+
     MyGattServerHandler defaultHandler = new MyGattServerHandler() {
     	
     	public void handleReadRequest(UUID uuid) { }
@@ -253,15 +279,23 @@ public class BleMessenger {
     MyGattClientHandler clientHandler = new MyGattClientHandler() {
     	
 		@Override
-		public void getFoundDevices(ArrayList<BluetoothDevice> devices) {
+		public void intakeFoundDevices(ArrayList<BluetoothDevice> devices) {
 			
 			// loop over all the found devices
 			// add them 
 			for (BluetoothDevice b: devices) {
 				Log.v(TAG, "(BleMessenger)MyGattClientHandler found device:" + b.getAddress());
-				BlePeer blePeer = new BlePeer(b.getAddress());
 				
-				//myGattClient.connectAddress(b.getAddress());
+				
+				// if the peer isn't already in our list, put them in!
+				String peerAddress = b.getAddress();
+				
+				if (!peerMap.containsKey(peerAddress)) {
+					BlePeer blePeer = new BlePeer(peerAddress);
+					peerMap.put(peerAddress, blePeer);
+				}
+				
+				myGattClient.connectAddress(peerAddress);
 			}
 			
 		}
@@ -269,6 +303,31 @@ public class BleMessenger {
 		public void readCharacteristicReturned(BluetoothGatt gatt, BluetoothGattCharacteristic readChar, byte[] charValue, int status) {
 			// a characteristic came in outta the blue - what do i do with it?
 			
+			// who the hell is talking back to us?
+			String remoteAddress = gatt.getDevice().getAddress().toString();
+			
+			// find the peer based on that address
+			BlePeer bleP = peerMap.get(remoteAddress);
+			
+			parseIncomingMsg(bleP, readChar, charValue, true);
+
+			UUID readIdChar = uuidFromBase("100"); 
+
+			Log.v(TAG, "read request returned from:" + remoteAddress);
+			
+			// if the incoming characteristic is an ID
+			if (readChar.getUuid().equals(readIdChar)) {
+				String remoteName = new String(charValue); 
+				bleP.SetName(remoteName);
+				peerMap.put(remoteAddress, bleP);
+				
+				Log.v(TAG, "added to peermap:" + remoteName);
+				
+				bleStatusCallback.remoteServerAdded(bleP.GetName());
+				
+			}
+			
+			// now need to add if incoming characteristic is handling data
 			
 		}
 		
@@ -277,35 +336,88 @@ public class BleMessenger {
 		@Override
 		public void getFoundCharacteristics(BluetoothGatt gatt, List<BluetoothGattCharacteristic> foundChars) {
 			
-			// TODO: what stage is this particular gatt instance in?
 			String gattServiceAddress = gatt.getDevice().getAddress();
 			String currentStateForService = "id";
 			
-			String charIdentifier = "100";
-			String readIdChar =  uuidServiceBase.substring(0, 4) + new String(new char[4-charIdentifier.length()]).replace("\0", "0") + charIdentifier + uuidServiceBase.substring(8, uuidServiceBase.length());
-			
-			charIdentifier = "101";
-			String writeIdChar =  uuidServiceBase.substring(0, 4) + new String(new char[4-charIdentifier.length()]).replace("\0", "0") + charIdentifier + uuidServiceBase.substring(8, uuidServiceBase.length());
-			
 			String myIdentifying = myIdentifier + "|" + myFriendlyName;
+
+			// the characteristics from a remote gatt device have been pulled into the foundChars List<>
+			// we should expect a certain number and type of characteristics
+	
+
+			// the correct service definition has already been verified
+			// you don't really need to loop over all kinds of shit, you've already verified!
 			
-			// if we're in the ID phase
-			if (currentStateForService.equalsIgnoreCase("id")) {
+			/*
+			for (BluetoothGattCharacteristic c : foundChars) {
+				// hmmm, how to check each one?
 				
-				for (BluetoothGattCharacteristic c : foundChars) {
-					// if this is the read id characteristic, grab the value
-					if (c.getUuid().toString().equalsIgnoreCase(readIdChar)) {
-						myGattClient.submitCharacteristicReadRequest(c);
-					}
+				// if this is the read id characteristic, grab the value
+				if (c.getUuid().toString().equalsIgnoreCase(readIdChar)) {
+					myGattClient.submitCharacteristicReadRequest(c);
+				}
+				
+				// if this is the write id characteristic, write to it
+				if (c.getUuid().toString().equalsIgnoreCase(writeIdChar)) {
+					// write characteristic over 20 bytes fucks everything up
 					
-					// if this is the write id characteristic, write to it
-					if (c.getUuid().toString().equalsIgnoreCase(writeIdChar)) {
-						myGattClient.submitCharacteristicWriteRequest(c, myIdentifying.getBytes());
-					}
+					// create a message
+					//BleMessage blmMyInfo = new BleMessage();
+					//blmMyInfo.setMessage(myIdentifying.getBytes());
+					
+					//myGattClient.submitCharacteristicWriteRequest(c, myIdentifying.getBytes());
 				}
 			}
 			
+			
+			*/
 
+			
+		}
+		
+		@Override
+		public void parlayWithRemote(String remoteAddress) {
+			
+			// so at this point we should still be connected with our remote device
+			// and we wouldn't have gotten here if the remote device didn't meet our service spec
+			// so now let's trade identification information and transfer any data
+
+			// find the peer based on that address
+			BlePeer bleP = peerMap.get(remoteAddress);
+			
+			// get identity info
+			BleMessage msgIdentity = getIdentity(remoteAddress);
+			
+			/*
+			 * IF WE USE READ:
+			 * the peripheral's read attribute will reset upon a new connection
+			 * central will read the attribute using the standard call and re-call
+			 * until final message end is set
+			 * this all goes through the onCharacteristicRead result from MyCentral
+			 * 
+			 * we should get the identifier and the public key and store them in the BlePeer object
+			 * sha1's of public keys identify folks?
+			 * 
+			 * then WRITE to the peripheral's IDENTITY WRITE characteristic
+			 */
+
+			
+			
+			/// what do we need to get that id info?
+			/// we need to know 
+			// write identity info
+			
+			// 
+			
+			
+			
+
+
+			
+			// read from remote characteristic UUID uuidFromBase("100"),
+			// actually, that mechanism will be determined by other shit
+			
+			// get the remote identifying information
 			
 		}
 		
@@ -401,6 +513,16 @@ public class BleMessenger {
 		}
 
 		@Override
+		public void handleWriteResult(BluetoothGatt gatt, BluetoothGattCharacteristic writtenCharacteristic, int result) {
+			// if we're handling the data characteristics, then do this:
+			// sendWrite(writtenCharacteristic);
+			
+			// if we're handling identification characteristics, and we were successful, we've identified ourselves to the remote server
+			
+			
+		}
+		
+		@Override
 		public void reportDisconnect() {
 
 			
@@ -412,6 +534,7 @@ public class BleMessenger {
 			// TODO Auto-generated method stub
 			
 		}
+
     	
     };
 
