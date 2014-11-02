@@ -8,4 +8,8 @@ public interface BleStatusCallback {
 	
 	public void remoteServerAdded(String serverName);
 	
+	public void foundPeer(BlePeer blePeer);
+	
+	public void handleReceivedMessage(String recipientFingerprint, String senderFingerprint, byte[] payload, String msgType);
+	
 }

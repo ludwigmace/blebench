@@ -1,6 +1,7 @@
 package com.blemsgfw;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -44,6 +45,9 @@ public class BleMessenger {
     private String myIdentifier;
     private String myFriendlyName;
 
+    // keep a map of our messages for a connection session - this may not work out; or we may need to keep a map per peer
+    private Map<Integer, BleMessage> bleMessageMap;
+    
     private Map<String, BlePeer> peerMap;
     
     List<BleCharacteristic> serviceDef;
@@ -278,6 +282,78 @@ public class BleMessenger {
     
     MyGattClientHandler clientHandler = new MyGattClientHandler() {
     	
+    	@Override
+    	public void incomingMissive(String remoteAddress, UUID remoteCharUUID, byte[] incomingBytes) {
+    		// based on remoteAddress, UUID of remote characteristic, put the incomingBytes into a Message
+    		// probably need to have a switchboard function
+    		
+    		// remoteAddress will allow me to look up the connection, so "sender" won't need to be in the packet
+    		// 
+    		
+    		int parentMessagePacketTotal = 0;
+    		
+    		// if our msg is under a few bytes it can't be valid; return
+        	if (incomingBytes.length < 5) {
+        		return;
+        	}
+        	
+        	//get the connection
+        	BlePeer thisConnection = peerMap.get(remoteAddress);
+    	    	
+    		// stick our incoming bytes into a bytebuffer to do some operations
+        	ByteBuffer bb  = ByteBuffer.wrap(incomingBytes);
+        
+        	// get the Message to which these packets belong as well as the current counter
+        	int parentMessage = incomingBytes[0] & 0xFF;
+        	int packetCounter = (incomingBytes[1] << 8) | incomingBytes[2] & 0xFF;
+
+        	// find the message for this connection that we're building
+        	BleMessage b = thisConnection.getBleMessage(parentMessage);
+        	
+        	// your packet payload will be the size of the incoming bytes less our 3 needed for the header (ref'd above)
+        	byte[] packetPayload = new byte[incomingBytes.length - 3];
+        	
+        	// throw these bytes into our payload array
+        	bb.get(packetPayload, 2, incomingBytes.length - 3);
+        	
+        	// if our current packet counter is ZERO, then we can expect our payload to be:
+        	// the number of packets we're expecting
+        	if (packetCounter == 0) {
+        		// right now this is only going to be a couple of bytes
+        		parentMessagePacketTotal = (incomingBytes[3] << 8) | incomingBytes[4] & 0xFF;
+        		b.BuildMessageFromPackets(packetCounter, packetPayload, parentMessagePacketTotal);
+        	} else {
+        		// otherwise throw this packet payload into the message
+        		b.BuildMessageFromPackets(packetCounter, packetPayload);	
+        	}
+        	
+        	// check if this particular message is done; ie, is it still pending packets?
+        	if (b.PendingPacketStatus() == false) {
+        		
+        		// this message receipt is now complete
+        		// so now we need to handle that completed state
+        		
+        		// if this particular message was an identifying message, then:
+        		// - send our identity over
+        		// - return friendly name to calling program
+
+        		byte[] payload = b.MessagePayload;
+        		String recipientFingerprint = bytesToHex(b.RecipientFingerprint);
+        		String senderFingerprint = bytesToHex(b.SenderFingerprint);
+        		String msgType = b.MessageType;
+        		
+        		bleStatusCallback.handleReceivedMessage(recipientFingerprint, senderFingerprint, payload, msgType);
+        		
+        		// check message integrity here?
+        		// what about encryption?
+        		
+        		// how do i parse the payload if the message contains handshake/identity?
+        	}
+        	
+    		
+    		
+    	}
+    	
 		@Override
 		public void intakeFoundDevices(ArrayList<BluetoothDevice> devices) {
 			
@@ -295,6 +371,7 @@ public class BleMessenger {
 					peerMap.put(peerAddress, blePeer);
 				}
 				
+				// this could possibly be moved into an exterior loop
 				myGattClient.connectAddress(peerAddress);
 			}
 			
@@ -382,42 +459,20 @@ public class BleMessenger {
 			// and we wouldn't have gotten here if the remote device didn't meet our service spec
 			// so now let's trade identification information and transfer any data
 
-			// find the peer based on that address
-			BlePeer bleP = peerMap.get(remoteAddress);
+			BleMessage b = new BleMessage();
 			
-			// get identity info
-			BleMessage msgIdentity = getIdentity(remoteAddress);
+			// this message will have a numeric identifier of Zero since it's an ID message, and will use the other info for general ID as well:
+			// for the peer id'd by address (might want to change to the actual peer object instead), the UUID we've selected for IDs
+			b.SetRemoteInfo(remoteAddress, uuidFromBase("100"), 0);
 			
-			/*
-			 * IF WE USE READ:
-			 * the peripheral's read attribute will reset upon a new connection
-			 * central will read the attribute using the standard call and re-call
-			 * until final message end is set
-			 * this all goes through the onCharacteristicRead result from MyCentral
-			 * 
-			 * we should get the identifier and the public key and store them in the BlePeer object
-			 * sha1's of public keys identify folks?
-			 * 
-			 * then WRITE to the peripheral's IDENTITY WRITE characteristic
-			 */
+			// add this new message to our message map
+			bleMessageMap.put(0, b);
 
+			// pass our remote address and desired uuid to our gattclient, who will look up the gatt object and uuid and issue the read request
+			myGattClient.submitCharacteristicReadRequest(remoteAddress, uuidFromBase("100"));
 			
-			
-			/// what do we need to get that id info?
-			/// we need to know 
-			// write identity info
-			
-			// 
-			
-			
-			
+			// still need to write identity info
 
-
-			
-			// read from remote characteristic UUID uuidFromBase("100"),
-			// actually, that mechanism will be determined by other shit
-			
-			// get the remote identifying information
 			
 		}
 		
@@ -538,4 +593,15 @@ public class BleMessenger {
     	
     };
 
+    final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for ( int j = 0; j < bytes.length; j++ ) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = hexArray[v >>> 4];
+            hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+    
 }

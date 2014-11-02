@@ -32,6 +32,7 @@ public interface MyGattClientHandler {
 	public void handleWriteResult(BluetoothGatt gatt, BluetoothGattCharacteristic writtenCharacteristic, int result);
 	
 	public void parlayWithRemote(String remoteAddress);
+	public void incomingMissive(String remoteAddress, UUID remoteCharUUID, byte[] incomingBytes);
 	
 	public void reportDisconnect();
 	

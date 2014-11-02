@@ -1,7 +1,9 @@
 package com.blemsgfw;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import android.app.Activity;
@@ -63,6 +65,7 @@ public class MyCentral {
     private MyGattClientHandler gattClientHandler;
     
     private List<BleCharacteristic> serviceDef;
+    private Map<String, BluetoothGatt> gattS;
     
     // scan for 2 1/2 seconds at a time
     private static final long SCAN_PERIOD = 2500;
@@ -83,6 +86,8 @@ public class MyCentral {
         gattClientHandler = myHandler;
         
         serviceDef = new ArrayList<BleCharacteristic>();
+        
+        gattS = new HashMap<String, BluetoothGatt>();
         
     }
 
@@ -174,8 +179,25 @@ public class MyCentral {
 		
 		return charWrote;
     }
+
+    public boolean submitCharacteristicReadRequest(String remoteAddr, UUID uuidChar) {
+    	
+    	boolean charFound = false;
+    	
+    	BluetoothGatt gatt = gattS.get(remoteAddr);
+    	BluetoothGattCharacteristic readChar = gatt.getService(UUID.fromString(strSvcUuidBase)).getCharacteristic(uuidChar);
+
+    	if (readChar != null) {
+    		Log.v(TAG, "issuing read request:" + readChar.getUuid().toString());
+    		gatt.readCharacteristic(readChar);
+    		charFound = true;
+    	}
+    	
+    	return charFound;
+    	
+    }
     
-    
+
     public boolean submitCharacteristicReadRequest(BluetoothGattCharacteristic readChar) {
     	
     	boolean charFound = false;
@@ -280,12 +302,19 @@ public class MyCentral {
                 mConnectionState = STATE_CONNECTED;
                 
                 Log.v(TAG, "Connected to GATT server " + gatt.getDevice().getAddress());
+
+                // save a reference to this gatt server!
+                gattS.put(gatt.getDevice().getAddress(), gatt);
                 gatt.discoverServices();
                 //Log.i(TAG, "Attempting to start service discovery:" + mBluetoothGatt.discoverServices());
 
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 intentAction = ACTION_GATT_DISCONNECTED;
                 mConnectionState = STATE_DISCONNECTED;
+                
+                // since we're disconnected, remove this guy
+                gattS.remove(gatt.getDevice().getAddress());
+                
                 gattClientHandler.reportDisconnect();
                 Log.i(TAG, "Disconnected from GATT server " + gatt.getDevice().getAddress());
                 
@@ -353,8 +382,7 @@ public class MyCentral {
         		if (bServiceGood) {
         			Log.v(TAG, "service definition found; stay connected");
         			//gattClientHandler.getFoundCharacteristics(gatt, s.getCharacteristics());
-        			//gattClientHandler.parlayWithRemote(gatt.getDevice().getAddress());
-        			
+        			gattClientHandler.parlayWithRemote(gatt.getDevice().getAddress());
         			// initiate identification phase, and then data transfer phase!
         			
         		} else {
@@ -373,8 +401,9 @@ public class MyCentral {
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
             	
-            	gattClientHandler.readCharacteristicReturned(gatt, characteristic, characteristic.getValue(), status);
+            	//gattClientHandler.readCharacteristicReturned(gatt, characteristic, characteristic.getValue(), status);
             	//gattClientHandler.getReadCharacteristic(gatt, characteristic, characteristic.getValue(), status);
+            	gattClientHandler.incomingMissive(gatt.getDevice().getAddress(), characteristic.getUuid(), characteristic.getValue());
             	
                 Log.v(TAG, "+read " + characteristic.getUuid().toString() + ": " + new String((characteristic.getValue())));
             } else {

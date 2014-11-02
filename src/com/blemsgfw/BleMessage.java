@@ -1,6 +1,7 @@
 package com.blemsgfw;
 
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -27,11 +28,32 @@ public class BleMessage {
 	private boolean pendingPacketStatus;
 	private int counter;
 	private int messagePacketSize;
+	private String remoteAddress;
+	private UUID remoteCharacteristic;
+	private int messageIdentifier;
+	
+	public String MessageType;
+	public byte[] RecipientFingerprint;
+	public byte[] SenderFingerprint;
+	public byte[] MessageHash;
+	public byte[] MessagePayload;
 	
 	
 	public void AddRecipient(BleRecipient Recipient) {
 		messageRecipients.add(Recipient);
 	}
+
+	public void SetRemoteInfo(String RemoteAddress, UUID RemoteCharacteristic) {
+		remoteAddress = RemoteAddress;
+		remoteCharacteristic = RemoteCharacteristic;
+	}
+	
+	public void SetRemoteInfo(String RemoteAddress, UUID RemoteCharacteristic, int MessageIdentifier) {
+		remoteAddress = RemoteAddress;
+		remoteCharacteristic = RemoteCharacteristic;
+		messageIdentifier = MessageIdentifier;
+	}
+	
 	
 	public BleMessage() {
 		messagePackets = new ArrayList<BlePacket>();
@@ -137,6 +159,66 @@ public class BleMessage {
 		
 	}
 	
+	// this signature of the method will be called when this Message is created
+	public void BuildMessageFromPackets(int packetCounter, byte[] packetPayload, int messageSize) {
+		messagePackets = new ArrayList<BlePacket>();
+		BlePacketCount = messageSize;
+		pendingPacketStatus = true;
+		BuildMessageFromPackets(packetCounter, packetPayload);
+	}
+	
+	public void BuildMessageFromPackets(int packetCounter, byte[] packetPayload) {
+		this.addPacket(packetCounter, packetPayload);
+		
+		// if we've got all the packets for this message, set our pending packet flag to false
+		// this will need to be changed to account for missing packets, if we use NOTIFY to get our data, or non-reliable WRITEs
+		if (packetCounter >= BlePacketCount) {
+			pendingPacketStatus = false;
+			// now act on the fact this message has all its packets
+			unbundleMessage();
+		}
+		
+	}
+	
+	private void unbundleMessage() {
+		/*
+		 * - message type
+		 * - recipient fingerprint
+		 * - sender fingerprint
+		 * - hash/mic
+		 * - payload
+		 */
+		
+		byte[] allBytes = getAllBytes();
+		
+		byte[] msgType = Arrays.copyOfRange(allBytes, 0, 1); // byte 0
+		RecipientFingerprint = Arrays.copyOfRange(allBytes, 1, 21); // bytes 1-20
+		SenderFingerprint = Arrays.copyOfRange(allBytes, 21, 41); // bytes 21-40
+		MessageHash = Arrays.copyOfRange(allBytes, 41, 61); // bytes 41-60
+		MessagePayload = Arrays.copyOfRange(allBytes, 61, allBytes.length+1); //bytes 61 through end
+
+		if (msgType.equals(new byte[] {0x01})) {
+			MessageType = "identity";
+		} else {
+			MessageType = "direct";
+		}
+		
+		
+	}
+	
+	
+	public byte[] getAllBytes() {
+		
+		ByteArrayOutputStream os = new ByteArrayOutputStream();
+		
+        for (BlePacket b : messagePackets) {
+        	os.write(b.MessageBytes, 0, b.MessageBytes.length);
+        }
+		
+        return os.toByteArray(); 
+		
+	}
+	
 	public boolean BuildMessage(byte[] incomingBytes) {
 		
     	ByteBuffer bb  = ByteBuffer.wrap(incomingBytes);
@@ -144,8 +226,8 @@ public class BleMessage {
     	
     	if (incomingBytes.length > 1) {
 	    	
-	    	// get the first byte as an integer, unsigned
-	    	//int packetCounter = bb.get(0) & 0xFF;
+
+    		// the first byte tells us what's going on with this message
 	    	byte pC = bb.get(0);
 	    	 
 	    	
@@ -169,7 +251,7 @@ public class BleMessage {
 	    	} else if (pC == (byte) 0x04) {
 	    		nextMsg = false;
 	            
-	    	//number, so a packet counter
+	    	// packet counter
 	    	} else {
 	    		int packetCounter = bb.get(1) & 0xFF;
 	    		

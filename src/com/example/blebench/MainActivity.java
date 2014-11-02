@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.blemsgfw.BleMessage;
 import com.blemsgfw.BleMessenger;
 import com.blemsgfw.BleMessengerOptions;
+import com.blemsgfw.BlePeer;
 import com.blemsgfw.BleRecipient;
 import com.blemsgfw.BleStatusCallback;
 import com.google.common.io.ByteStreams;
@@ -125,6 +126,13 @@ public class MainActivity extends Activity {
 	BleStatusCallback bleMessageStatus = new BleStatusCallback() {
 
 		@Override
+		public void handleReceivedMessage(String recipientFingerprint, String senderFingerprint, byte[] payload, String msgType) {
+			// check our array for friends with the senderFingerprint
+			// if we don't, then parse the public key & friendly name out of the payload
+			
+		}
+		
+		@Override
 		public void messageSent(UUID uuid) {
 			
 			final String sUUID = uuid.toString(); 
@@ -141,6 +149,20 @@ public class MainActivity extends Activity {
 		@Override
 		public void remoteServerAdded(String serverName) {
 			showMessage(serverName);
+		}
+
+		@Override
+		public void foundPeer(BlePeer blePeer) {
+			final String peerName = blePeer.GetName(); 
+			
+            runOnUiThread(new Runnable() {
+
+                @Override
+                public void run() {
+                	showMessage("peer found:" + peerName);
+                }
+            });
+			
 		}
 		
 		
